@@ -44,6 +44,9 @@ class JavaScriptTypeScriptParser(BaseParser):
         # Extract test blocks
         self._extract_test_blocks(content, lines, file_path, result)
 
+        # Extract security-relevant patterns
+        self._extract_security_patterns(content, lines, file_path, result)
+
         if self.is_typescript:
             self._extract_interfaces(content, lines, file_path, result)
             self._extract_types(content, lines, file_path, result)
@@ -465,6 +468,116 @@ class JavaScriptTypeScriptParser(BaseParser):
                         for match in re.finditer(pattern, func_content):
                             api_calls.append({'url': match.group(1)})
                     component.api_calls = api_calls
+
+    def _extract_security_patterns(self, content: str, lines: List[str], file_path: str, result: ParseResult):
+        """
+        Extract security-relevant patterns for security auditing.
+        Categories: input_source, output_sink, data_operation, security_control
+        """
+        # Input sources - where external data enters the application
+        input_patterns = [
+            # Hono/Express request access
+            (r'(\w+)\.req\.header\s*\(\s*[\'"]([^\'"]+)[\'"]', 'http_header', 'input_source'),
+            (r'(\w+)\.req\.query\s*\(\s*[\'"]?([^\'")\s]+)?', 'query_param', 'input_source'),
+            (r'(\w+)\.req\.param\s*\(\s*[\'"]([^\'"]+)[\'"]', 'route_param', 'input_source'),
+            (r'(\w+)\.req\.body', 'request_body', 'input_source'),
+            (r'(\w+)\.req\.json\s*\(', 'request_json', 'input_source'),
+            (r'(\w+)\.req\.text\s*\(', 'request_text', 'input_source'),
+            (r'(\w+)\.req\.formData\s*\(', 'form_data', 'input_source'),
+            (r'(\w+)\.req\.cookie\s*\(\s*[\'"]?([^\'")\s]+)?', 'cookie', 'input_source'),
+            # Express-style
+            (r'req\.headers?\[?[\'"]?([^\'")\]\s]+)?', 'http_header', 'input_source'),
+            (r'req\.query\[?[\'"]?([^\'")\]\s]+)?', 'query_param', 'input_source'),
+            (r'req\.params?\[?[\'"]?([^\'")\]\s]+)?', 'route_param', 'input_source'),
+            (r'req\.body\b', 'request_body', 'input_source'),
+            (r'req\.cookies?\[?[\'"]?([^\'")\]\s]+)?', 'cookie', 'input_source'),
+            # Browser/DOM input
+            (r'document\.getElementById\s*\(\s*[\'"]([^\'"]+)[\'"]', 'dom_element', 'input_source'),
+            (r'document\.querySelector\s*\(\s*[\'"]([^\'"]+)[\'"]', 'dom_element', 'input_source'),
+            (r'\.value\b', 'form_input', 'input_source'),
+            (r'window\.location', 'url_location', 'input_source'),
+            (r'document\.referrer', 'referrer', 'input_source'),
+            (r'document\.cookie', 'document_cookie', 'input_source'),
+            (r'localStorage\.(getItem|get)\s*\(', 'local_storage', 'input_source'),
+            (r'sessionStorage\.(getItem|get)\s*\(', 'session_storage', 'input_source'),
+            (r'new\s+URLSearchParams\s*\(', 'url_params', 'input_source'),
+            # Environment
+            (r'process\.env\[?[\'"]?([^\'")\]\s]+)?', 'env_var', 'input_source'),
+            (r'Deno\.env\.(get|toObject)', 'env_var', 'input_source'),
+        ]
+
+        # Output sinks - where data is rendered/output (XSS, injection points)
+        output_patterns = [
+            (r'\.innerHTML\s*=', 'inner_html', 'output_sink'),
+            (r'\.outerHTML\s*=', 'outer_html', 'output_sink'),
+            (r'document\.write\s*\(', 'document_write', 'output_sink'),
+            (r'document\.writeln\s*\(', 'document_write', 'output_sink'),
+            (r'\.insertAdjacentHTML\s*\(', 'insert_html', 'output_sink'),
+            (r'eval\s*\(', 'eval', 'output_sink'),
+            (r'new\s+Function\s*\(', 'function_constructor', 'output_sink'),
+            (r'setTimeout\s*\(\s*[\'"`]', 'timeout_string', 'output_sink'),
+            (r'setInterval\s*\(\s*[\'"`]', 'interval_string', 'output_sink'),
+            (r'\.src\s*=', 'src_assignment', 'output_sink'),
+            (r'\.href\s*=', 'href_assignment', 'output_sink'),
+        ]
+
+        # Data operations - database queries, file operations
+        data_patterns = [
+            # SQL/Database
+            (r'\.prepare\s*\(', 'sql_prepare', 'data_operation'),
+            (r'\.query\s*\(', 'sql_query', 'data_operation'),
+            (r'\.execute\s*\(', 'sql_execute', 'data_operation'),
+            (r'\.raw\s*\(', 'sql_raw', 'data_operation'),
+            (r'\.exec\s*\(', 'sql_exec', 'data_operation'),
+            # ORM patterns
+            (r'\.findOne\s*\(', 'orm_find', 'data_operation'),
+            (r'\.findMany\s*\(', 'orm_find', 'data_operation'),
+            (r'\.create\s*\(', 'orm_create', 'data_operation'),
+            (r'\.update\s*\(', 'orm_update', 'data_operation'),
+            (r'\.delete\s*\(', 'orm_delete', 'data_operation'),
+            # File operations
+            (r'fs\.(readFile|writeFile|appendFile)', 'file_operation', 'data_operation'),
+            (r'Deno\.(readFile|writeFile|readTextFile|writeTextFile)', 'file_operation', 'data_operation'),
+        ]
+
+        # Security controls - sanitization, validation, encoding
+        security_patterns = [
+            (r'sanitize\w*\s*\(', 'sanitize', 'security_control'),
+            (r'escape\w*\s*\(', 'escape', 'security_control'),
+            (r'encode\w*\s*\(', 'encode', 'security_control'),
+            (r'validate\w*\s*\(', 'validate', 'security_control'),
+            (r'DOMPurify\.sanitize\s*\(', 'dom_purify', 'security_control'),
+            (r'xss\s*\(', 'xss_filter', 'security_control'),
+            (r'htmlEncode\s*\(', 'html_encode', 'security_control'),
+            (r'encodeURIComponent\s*\(', 'uri_encode', 'security_control'),
+            (r'encodeURI\s*\(', 'uri_encode', 'security_control'),
+        ]
+
+        all_patterns = input_patterns + output_patterns + data_patterns + security_patterns
+
+        for i, line in enumerate(lines, 1):
+            for pattern, subtype, category in all_patterns:
+                if match := re.search(pattern, line):
+                    # Create a meaningful name from context
+                    context = match.group(0)[:40].replace('\n', ' ').strip()
+                    name = f"{category}_{subtype}_L{i}"
+
+                    component = ComponentData(
+                        name=name,
+                        type='security_pattern',
+                        file_path=file_path,
+                        line_start=i,
+                        line_end=i,
+                        signature=line.strip()[:100],
+                        exported=False,
+                        metadata={
+                            'category': category,
+                            'subtype': subtype,
+                            'pattern': pattern,
+                            'context': context
+                        }
+                    )
+                    result.add_component(component)
 
     def _extract_signature(self, lines: List[str], start_idx: int) -> str:
         """Extract full function signature."""

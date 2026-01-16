@@ -32,6 +32,9 @@ class CParser(BaseParser):
         self._extract_macros(content, lines, file_path, result)
         self._extract_enums(content, lines, file_path, result)
 
+        # Extract security patterns
+        self._extract_security_patterns(lines, file_path, result)
+
         return result
 
     def _extract_includes(self, content: str, file_path: str, result: ParseResult):
@@ -182,5 +185,88 @@ class CParser(BaseParser):
                         line_end=self._find_block_end(lines, i - 1),
                         signature=f"enum {name}",
                         exported=True
+                    )
+                    result.add_component(component)
+
+    def _extract_security_patterns(self, lines: List[str], file_path: str, result: ParseResult):
+        """
+        Extract security-relevant patterns for security auditing.
+        Categories: input_source, output_sink, data_operation, security_control
+        """
+        # Input sources - dangerous input functions
+        input_patterns = [
+            (r'\bgets\s*\(', 'gets', 'input_source'),
+            (r'\bscanf\s*\(', 'scanf', 'input_source'),
+            (r'\bfscanf\s*\(', 'fscanf', 'input_source'),
+            (r'\bsscanf\s*\(', 'sscanf', 'input_source'),
+            (r'\bfgets\s*\(', 'fgets', 'input_source'),
+            (r'\bread\s*\(', 'read', 'input_source'),
+            (r'\brecv\s*\(', 'recv', 'input_source'),
+            (r'\brecvfrom\s*\(', 'recvfrom', 'input_source'),
+            (r'\bgetenv\s*\(', 'getenv', 'input_source'),
+            (r'\bargv\[', 'argv', 'input_source'),
+        ]
+
+        # Output sinks - dangerous output/execution
+        output_patterns = [
+            (r'\bsystem\s*\(', 'system', 'output_sink'),
+            (r'\bexec\w*\s*\(', 'exec', 'output_sink'),
+            (r'\bpopen\s*\(', 'popen', 'output_sink'),
+            (r'\bprintf\s*\(', 'printf', 'output_sink'),
+            (r'\bsprintf\s*\(', 'sprintf', 'output_sink'),
+            (r'\bfprintf\s*\(', 'fprintf', 'output_sink'),
+            (r'\bvprintf\s*\(', 'vprintf', 'output_sink'),
+            (r'\bvsprintf\s*\(', 'vsprintf', 'output_sink'),
+        ]
+
+        # Data operations - memory/buffer operations
+        data_patterns = [
+            (r'\bstrcpy\s*\(', 'strcpy', 'data_operation'),
+            (r'\bstrcat\s*\(', 'strcat', 'data_operation'),
+            (r'\bstrncpy\s*\(', 'strncpy', 'data_operation'),
+            (r'\bstrncat\s*\(', 'strncat', 'data_operation'),
+            (r'\bmemcpy\s*\(', 'memcpy', 'data_operation'),
+            (r'\bmemmove\s*\(', 'memmove', 'data_operation'),
+            (r'\bmalloc\s*\(', 'malloc', 'data_operation'),
+            (r'\bcalloc\s*\(', 'calloc', 'data_operation'),
+            (r'\brealloc\s*\(', 'realloc', 'data_operation'),
+            (r'\bfree\s*\(', 'free', 'data_operation'),
+            (r'\bfopen\s*\(', 'fopen', 'data_operation'),
+            (r'\bfwrite\s*\(', 'fwrite', 'data_operation'),
+            (r'\bfread\s*\(', 'fread', 'data_operation'),
+        ]
+
+        # Security controls - safer alternatives
+        security_patterns = [
+            (r'\bsnprintf\s*\(', 'snprintf', 'security_control'),
+            (r'\bstrlcpy\s*\(', 'strlcpy', 'security_control'),
+            (r'\bstrlcat\s*\(', 'strlcat', 'security_control'),
+            (r'\bstrncmp\s*\(', 'strncmp', 'security_control'),
+            (r'\bmemcmp\s*\(', 'memcmp', 'security_control'),
+            (r'\bsecure_getenv\s*\(', 'secure_getenv', 'security_control'),
+        ]
+
+        all_patterns = input_patterns + output_patterns + data_patterns + security_patterns
+
+        for i, line in enumerate(lines, 1):
+            for pattern, subtype, category in all_patterns:
+                if match := re.search(pattern, line):
+                    context = match.group(0)[:40].replace('\n', ' ').strip()
+                    name = f"{category}_{subtype}_L{i}"
+
+                    component = ComponentData(
+                        name=name,
+                        type='security_pattern',
+                        file_path=file_path,
+                        line_start=i,
+                        line_end=i,
+                        signature=line.strip()[:100],
+                        exported=False,
+                        metadata={
+                            'category': category,
+                            'subtype': subtype,
+                            'pattern': pattern,
+                            'context': context
+                        }
                     )
                     result.add_component(component)

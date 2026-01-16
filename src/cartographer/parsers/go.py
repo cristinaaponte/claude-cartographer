@@ -32,6 +32,9 @@ class GoParser(BaseParser):
         self._extract_constants(content, lines, file_path, result)
         self._extract_type_aliases(lines, file_path, result)
 
+        # Extract security patterns
+        self._extract_security_patterns(lines, file_path, result)
+
         return result
 
     def _extract_imports(self, content: str, file_path: str, result: ParseResult):
@@ -232,3 +235,101 @@ class GoParser(BaseParser):
                     metadata={'alias_of': aliased_type}
                 )
                 result.add_component(component)
+
+    def _extract_security_patterns(self, lines: List[str], file_path: str, result: ParseResult):
+        """
+        Extract security-relevant patterns for security auditing.
+        Categories: input_source, output_sink, data_operation, security_control
+        """
+        # Input sources - where external data enters
+        input_patterns = [
+            # net/http request access
+            (r'r\.FormValue\s*\(', 'form_value', 'input_source'),
+            (r'r\.PostFormValue\s*\(', 'form_value', 'input_source'),
+            (r'r\.URL\.Query\(\)', 'query_param', 'input_source'),
+            (r'r\.Header\.Get\s*\(', 'http_header', 'input_source'),
+            (r'r\.Cookie\s*\(', 'cookie', 'input_source'),
+            (r'r\.Body\b', 'request_body', 'input_source'),
+            (r'r\.ParseForm\s*\(', 'form_parse', 'input_source'),
+            (r'r\.ParseMultipartForm\s*\(', 'multipart', 'input_source'),
+            # Gin framework
+            (r'c\.Query\s*\(', 'query_param', 'input_source'),
+            (r'c\.Param\s*\(', 'route_param', 'input_source'),
+            (r'c\.PostForm\s*\(', 'form_data', 'input_source'),
+            (r'c\.GetHeader\s*\(', 'http_header', 'input_source'),
+            (r'c\.BindJSON\s*\(', 'request_json', 'input_source'),
+            (r'c\.ShouldBindJSON\s*\(', 'request_json', 'input_source'),
+            # Echo framework
+            (r'c\.FormValue\s*\(', 'form_value', 'input_source'),
+            (r'c\.QueryParam\s*\(', 'query_param', 'input_source'),
+            (r'c\.Bind\s*\(', 'request_bind', 'input_source'),
+            # Environment
+            (r'os\.Getenv\s*\(', 'env_var', 'input_source'),
+            (r'os\.LookupEnv\s*\(', 'env_var', 'input_source'),
+            # Command line
+            (r'os\.Args\[', 'cli_arg', 'input_source'),
+            (r'flag\.(String|Int|Bool|Parse)', 'cli_flag', 'input_source'),
+        ]
+
+        # Output sinks
+        output_patterns = [
+            # Template rendering
+            (r'template\.HTML\s*\(', 'template_html', 'output_sink'),
+            (r'\.Execute\s*\(', 'template_execute', 'output_sink'),
+            # Code execution
+            (r'exec\.Command\s*\(', 'exec_command', 'output_sink'),
+            (r'exec\.CommandContext\s*\(', 'exec_command', 'output_sink'),
+            # Response writing
+            (r'w\.Write\s*\(', 'response_write', 'output_sink'),
+            (r'fmt\.Fprintf\s*\(w', 'response_write', 'output_sink'),
+            (r'io\.WriteString\s*\(w', 'response_write', 'output_sink'),
+        ]
+
+        # Data operations
+        data_patterns = [
+            # SQL
+            (r'\.Query\s*\(', 'sql_query', 'data_operation'),
+            (r'\.QueryRow\s*\(', 'sql_query', 'data_operation'),
+            (r'\.Exec\s*\(', 'sql_exec', 'data_operation'),
+            (r'\.Prepare\s*\(', 'sql_prepare', 'data_operation'),
+            (r'db\.Raw\s*\(', 'sql_raw', 'data_operation'),
+            # File operations
+            (r'os\.(Open|Create|OpenFile)\s*\(', 'file_operation', 'data_operation'),
+            (r'ioutil\.(ReadFile|WriteFile)\s*\(', 'file_operation', 'data_operation'),
+            (r'os\.(ReadFile|WriteFile)\s*\(', 'file_operation', 'data_operation'),
+        ]
+
+        # Security controls
+        security_patterns = [
+            (r'html\.EscapeString\s*\(', 'html_escape', 'security_control'),
+            (r'url\.QueryEscape\s*\(', 'url_escape', 'security_control'),
+            (r'template\.HTMLEscapeString\s*\(', 'html_escape', 'security_control'),
+            (r'bcrypt\.(GenerateFromPassword|CompareHashAndPassword)', 'bcrypt', 'security_control'),
+            (r'crypto/', 'crypto', 'security_control'),
+            (r'csrf\.', 'csrf', 'security_control'),
+        ]
+
+        all_patterns = input_patterns + output_patterns + data_patterns + security_patterns
+
+        for i, line in enumerate(lines, 1):
+            for pattern, subtype, category in all_patterns:
+                if match := re.search(pattern, line):
+                    context = match.group(0)[:40].replace('\n', ' ').strip()
+                    name = f"{category}_{subtype}_L{i}"
+
+                    component = ComponentData(
+                        name=name,
+                        type='security_pattern',
+                        file_path=file_path,
+                        line_start=i,
+                        line_end=i,
+                        signature=line.strip()[:100],
+                        exported=False,
+                        metadata={
+                            'category': category,
+                            'subtype': subtype,
+                            'pattern': pattern,
+                            'context': context
+                        }
+                    )
+                    result.add_component(component)

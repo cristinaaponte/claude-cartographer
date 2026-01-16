@@ -33,6 +33,9 @@ class CppParser(BaseParser):
         self._extract_templates(content, lines, file_path, result)
         self._extract_enums(content, lines, file_path, result)
 
+        # Extract security patterns
+        self._extract_security_patterns(lines, file_path, result)
+
         return result
 
     def _extract_includes(self, content: str, file_path: str, result: ParseResult):
@@ -236,3 +239,91 @@ class CppParser(BaseParser):
                     metadata={'scoped': is_enum_class}
                 )
                 result.add_component(component)
+
+    def _extract_security_patterns(self, lines: List[str], file_path: str, result: ParseResult):
+        """
+        Extract security-relevant patterns for security auditing.
+        Categories: input_source, output_sink, data_operation, security_control
+        """
+        # Input sources
+        input_patterns = [
+            # C-style input (also valid in C++)
+            (r'\bgets\s*\(', 'gets', 'input_source'),
+            (r'\bscanf\s*\(', 'scanf', 'input_source'),
+            (r'\bfscanf\s*\(', 'fscanf', 'input_source'),
+            (r'\bfgets\s*\(', 'fgets', 'input_source'),
+            (r'\bgetenv\s*\(', 'getenv', 'input_source'),
+            (r'\bargv\[', 'argv', 'input_source'),
+            # C++ streams
+            (r'\bcin\s*>>', 'cin', 'input_source'),
+            (r'\bgetline\s*\(', 'getline', 'input_source'),
+            (r'std::cin\s*>>', 'cin', 'input_source'),
+        ]
+
+        # Output sinks
+        output_patterns = [
+            # C-style
+            (r'\bsystem\s*\(', 'system', 'output_sink'),
+            (r'\bexec\w*\s*\(', 'exec', 'output_sink'),
+            (r'\bpopen\s*\(', 'popen', 'output_sink'),
+            (r'\bsprintf\s*\(', 'sprintf', 'output_sink'),
+            (r'\bvsprintf\s*\(', 'vsprintf', 'output_sink'),
+            # C++ streams
+            (r'\bcout\s*<<', 'cout', 'output_sink'),
+            (r'std::cout\s*<<', 'cout', 'output_sink'),
+        ]
+
+        # Data operations
+        data_patterns = [
+            # C-style memory
+            (r'\bstrcpy\s*\(', 'strcpy', 'data_operation'),
+            (r'\bstrcat\s*\(', 'strcat', 'data_operation'),
+            (r'\bmemcpy\s*\(', 'memcpy', 'data_operation'),
+            (r'\bmalloc\s*\(', 'malloc', 'data_operation'),
+            (r'\bfree\s*\(', 'free', 'data_operation'),
+            # C++ memory
+            (r'\bnew\s+', 'new', 'data_operation'),
+            (r'\bdelete\s+', 'delete', 'data_operation'),
+            (r'\bdelete\[\]', 'delete_array', 'data_operation'),
+            # Smart pointers (safer)
+            (r'std::unique_ptr', 'unique_ptr', 'data_operation'),
+            (r'std::shared_ptr', 'shared_ptr', 'data_operation'),
+            (r'std::make_unique', 'make_unique', 'data_operation'),
+            (r'std::make_shared', 'make_shared', 'data_operation'),
+        ]
+
+        # Security controls
+        security_patterns = [
+            (r'\bsnprintf\s*\(', 'snprintf', 'security_control'),
+            (r'\bstd::string\b', 'std_string', 'security_control'),
+            (r'\bstd::vector\b', 'std_vector', 'security_control'),
+            (r'\bstd::array\b', 'std_array', 'security_control'),
+            (r'static_cast<', 'static_cast', 'security_control'),
+            (r'dynamic_cast<', 'dynamic_cast', 'security_control'),
+            (r'reinterpret_cast<', 'reinterpret_cast', 'security_control'),
+        ]
+
+        all_patterns = input_patterns + output_patterns + data_patterns + security_patterns
+
+        for i, line in enumerate(lines, 1):
+            for pattern, subtype, category in all_patterns:
+                if match := re.search(pattern, line):
+                    context = match.group(0)[:40].replace('\n', ' ').strip()
+                    name = f"{category}_{subtype}_L{i}"
+
+                    component = ComponentData(
+                        name=name,
+                        type='security_pattern',
+                        file_path=file_path,
+                        line_start=i,
+                        line_end=i,
+                        signature=line.strip()[:100],
+                        exported=False,
+                        metadata={
+                            'category': category,
+                            'subtype': subtype,
+                            'pattern': pattern,
+                            'context': context
+                        }
+                    )
+                    result.add_component(component)

@@ -585,17 +585,21 @@ class TokenOptimizedDatabase:
         self,
         query: str,
         limit: int = 20,
+        offset: int = 0,
         filters: Optional[Dict[str, Any]] = None
     ) -> str:
         """
         Query components and return compact representations.
         Optimized for minimal token usage.
+
+        Supports pagination via limit and offset parameters.
+        Returns truncation info when results are limited.
         """
         start_time = time.time()
         self.query_count += 1
 
-        # Check cache
-        cache_key = f"compact:{query}:{limit}:{filters}"
+        # Check cache (include offset in key)
+        cache_key = f"compact:{query}:{limit}:{offset}:{filters}"
         if cache_key in self.query_cache:
             result, cached_time = self.query_cache[cache_key]
             if time.time() - cached_time < self.cache_ttl:
@@ -604,37 +608,55 @@ class TokenOptimizedDatabase:
 
         self.cache_misses += 1
 
-        # Build query
-        sql = "SELECT compact, access_count FROM component_index WHERE 1=1"
+        # Build base WHERE clause
+        where_clause = "WHERE 1=1"
         params = []
 
         if filters:
             if filters.get('type'):
-                sql += " AND type = ?"
+                where_clause += " AND type = ?"
                 params.append(filters['type'])
             if filters.get('exported'):
-                sql += " AND is_exported = 1"
+                where_clause += " AND is_exported = 1"
             if filters.get('file_path'):
-                sql += " AND file_path LIKE ?"
+                where_clause += " AND file_path LIKE ?"
                 params.append(f"%{filters['file_path']}%")
 
         # Name search
         if query:
-            sql += " AND (name LIKE ? OR compact LIKE ?)"
+            where_clause += " AND (name LIKE ? OR compact LIKE ?)"
             params.extend([f"%{query}%", f"%{query}%"])
 
-        sql += " ORDER BY access_count DESC, name LIMIT ?"
-        params.append(limit)
+        # Get total count first
+        count_sql = f"SELECT COUNT(*) as total FROM component_index {where_clause}"
+        cursor = self.conn.execute(count_sql, params)
+        total_count = cursor.fetchone()['total']
+
+        # Build query with pagination
+        sql = f"SELECT compact, access_count FROM component_index {where_clause}"
+        sql += " ORDER BY access_count DESC, name LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
 
         cursor = self.conn.execute(sql, params)
         rows = cursor.fetchall()
 
-        # Update access counts
+        # Build result with pagination info
         result_lines = []
         for row in rows:
             result_lines.append(row['compact'])
 
-        result = '\n'.join(result_lines) if result_lines else f"No components found matching '{query}'"
+        if not result_lines:
+            result = f"No components found matching '{query}'"
+        else:
+            result = '\n'.join(result_lines)
+
+            # Add pagination info if there are more results
+            shown_end = offset + len(result_lines)
+            if total_count > shown_end:
+                remaining = total_count - shown_end
+                result += f"\n\n--- Results {offset + 1}-{shown_end} of {total_count} (use --offset {shown_end} for next {min(remaining, limit)}) ---"
+            elif offset > 0:
+                result += f"\n\n--- Results {offset + 1}-{shown_end} of {total_count} ---"
 
         # Cache result
         self.query_cache[cache_key] = (result, time.time())
@@ -685,20 +707,42 @@ class TokenOptimizedDatabase:
 
         return None
 
-    def search_fts(self, query: str, limit: int = 20) -> str:
-        """Full-text search across components."""
+    def search_fts(self, query: str, limit: int = 20, offset: int = 0) -> str:
+        """Full-text search across components with pagination support."""
+        # Get total count first
+        try:
+            count_cursor = self.conn.execute("""
+                SELECT COUNT(*) as total
+                FROM component_search s
+                JOIN component_index c ON s.rowid = c.id
+                WHERE component_search MATCH ?
+            """, (query,))
+            total_count = count_cursor.fetchone()['total']
+        except sqlite3.OperationalError:
+            total_count = 0
+
         cursor = self.conn.execute("""
             SELECT c.compact, c.access_count
             FROM component_search s
             JOIN component_index c ON s.rowid = c.id
             WHERE component_search MATCH ?
             ORDER BY rank, c.access_count DESC
-            LIMIT ?
-        """, (query, limit))
+            LIMIT ? OFFSET ?
+        """, (query, limit, offset))
 
         rows = cursor.fetchall()
         if rows:
-            return '\n'.join(row['compact'] for row in rows)
+            result = '\n'.join(row['compact'] for row in rows)
+
+            # Add pagination info if there are more results
+            shown_end = offset + len(rows)
+            if total_count > shown_end:
+                remaining = total_count - shown_end
+                result += f"\n\n--- Results {offset + 1}-{shown_end} of {total_count} (use --offset {shown_end} for next {min(remaining, limit)}) ---"
+            elif offset > 0:
+                result += f"\n\n--- Results {offset + 1}-{shown_end} of {total_count} ---"
+
+            return result
         return f"No results for '{query}'"
 
     def get_call_chain(self, func_name: str, max_depth: int = 3) -> str:
@@ -798,14 +842,18 @@ class TokenOptimizedDatabase:
 
         return f"No components found in {file_path}"
 
-    def list_exports(self, limit: int = 50) -> str:
-        """List all exported components (public API)."""
+    def list_exports(self, limit: int = 50, offset: int = 0) -> str:
+        """List all exported components (public API) with pagination support."""
+        # Get total count first
+        cursor = self.conn.execute("SELECT COUNT(*) as total FROM component_index WHERE is_exported = 1")
+        total_count = cursor.fetchone()['total']
+
         cursor = self.conn.execute("""
             SELECT compact FROM component_index
             WHERE is_exported = 1
             ORDER BY access_count DESC, name
-            LIMIT ?
-        """, (limit,))
+            LIMIT ? OFFSET ?
+        """, (limit, offset))
 
         rows = cursor.fetchall()
 
@@ -813,6 +861,17 @@ class TokenOptimizedDatabase:
             lines = ["Exported Components (Public API):", ""]
             for row in rows:
                 lines.append(f"  {row['compact']}")
+
+            # Add pagination info if there are more results
+            shown_end = offset + len(rows)
+            if total_count > shown_end:
+                remaining = total_count - shown_end
+                lines.append("")
+                lines.append(f"--- Results {offset + 1}-{shown_end} of {total_count} (use --offset {shown_end} for next {min(remaining, limit)}) ---")
+            elif offset > 0:
+                lines.append("")
+                lines.append(f"--- Results {offset + 1}-{shown_end} of {total_count} ---")
+
             return '\n'.join(lines)
 
         return "No exported components found"

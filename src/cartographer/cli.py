@@ -121,15 +121,17 @@ def init(project_root, workers, no_mp, watch):
 
 @cli.command()
 @click.argument('query_text')
-@click.option('--max-tokens', '-t', default=2000, help='Maximum tokens to return')
+@click.option('--max-tokens', '-t', default=10000, help='Maximum tokens to return')
+@click.option('--offset', '-o', default=0, help='Skip first N results (for pagination)')
 @click.option('--format', '-f', type=click.Choice(['text', 'json']), default='text')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress token savings info')
-def query(query_text, max_tokens, format, quiet):
+def query(query_text, max_tokens, offset, format, quiet):
     """
     Query the codebase map.
 
     Supports natural language queries. The system will parse your intent
-    and return token-optimized results.
+    and return token-optimized results. Use --offset to paginate through
+    large result sets.
 
     \b
     Examples:
@@ -137,12 +139,13 @@ def query(query_text, max_tokens, format, quiet):
         claude-map query "what does auth.py depend on"
         claude-map query "show me exported functions"
         claude-map query "call chain for authenticate"
+        claude-map query "find User" --offset 20    # Get next page
     """
     project_root = find_project_root()
 
     try:
         integration = ClaudeCodeIntegration(project_root)
-        result = integration.get_context(query_text, max_tokens=max_tokens)
+        result = integration.get_context(query_text, max_tokens=max_tokens, offset=offset)
 
         optimized_tokens = len(result) // 4
 
@@ -153,6 +156,7 @@ def query(query_text, max_tokens, format, quiet):
                 'tokens_estimate': optimized_tokens,
                 'traditional_estimate': 20000,
                 'tokens_saved': 20000 - optimized_tokens,
+                'offset': offset,
             }
             click.echo(json.dumps(output, indent=2))
         else:
@@ -172,24 +176,27 @@ def query(query_text, max_tokens, format, quiet):
 @cli.command()
 @click.argument('name')
 @click.option('--limit', '-l', default=20, help='Maximum results to return')
+@click.option('--offset', '-o', default=0, help='Skip first N results (for pagination)')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress token savings info')
-def find(name, limit, quiet):
+def find(name, limit, offset, quiet):
     """
     Quick component search.
 
     Returns compact representations for minimal token usage.
+    Use --offset to paginate through large result sets.
 
     \b
     Examples:
         claude-map find UserService
         claude-map find authenticate
         claude-map find --limit 50 User
+        claude-map find User --offset 20    # Get next page
     """
     project_root = find_project_root()
 
     try:
         integration = ClaudeCodeIntegration(project_root)
-        result = integration.quick_find(name, limit=limit)
+        result = integration.quick_find(name, limit=limit, offset=offset)
         click.echo(result)
 
         if not quiet:
@@ -445,19 +452,20 @@ def show(file_path, quiet):
 
 @cli.command()
 @click.option('--limit', '-l', default=50, help='Maximum results')
+@click.option('--offset', '-o', default=0, help='Skip first N results (for pagination)')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress token savings info')
-def exports(limit, quiet):
+def exports(limit, offset, quiet):
     """
     List all exported components (public API).
 
     Shows all components marked as exported/public,
-    sorted by access frequency.
+    sorted by access frequency. Use --offset to paginate.
     """
     project_root = find_project_root()
 
     try:
         integration = ClaudeCodeIntegration(project_root)
-        result = integration.list_exports(limit=limit)
+        result = integration.list_exports(limit=limit, offset=offset)
         click.echo(result)
 
         if not quiet:

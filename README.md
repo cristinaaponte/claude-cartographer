@@ -95,89 +95,216 @@ Flexible access:
 ## Quick Start
 
 ```bash
-# Clone or download the repository
+# Clone the repository
 git clone https://github.com/pect0ral/claude-cartographer.git
-cd codebase-cartographer
+cd claude-cartographer
 
 # ONE-COMMAND SETUP (installs + initializes + benchmarks)
 ./setup.sh /path/to/your/project
 
 # Or step-by-step:
-./quick-install.sh /path/to/your/project
+python install.py /path/to/your/project
 cd /path/to/your/project
 .claude-map/bin/claude-map init
 
-# Query the map
-.claude-map/bin/claude-map query "find authentication components"
-.claude-map/bin/claude-map find UserProfile
-.claude-map/bin/claude-map stats
+# Start using
+.claude-map/bin/claude-map find UserProfile              # Quick search
+.claude-map/bin/claude-map query "find auth components"  # Natural language
+.claude-map/bin/claude-map stats                         # View statistics
 ```
 
 ## Installation
 
-### Option 1: Quick Install (Recommended)
+### Option 1: Full Setup Script (Recommended)
+
+The setup script installs, initializes the map, and runs a benchmark:
 
 ```bash
-# macOS/Linux
-./quick-install.sh /path/to/project
+./setup.sh /path/to/your/project
 ```
-
-> **Note:** Windows is not currently supported. macOS and Linux only.
 
 ### Option 2: Python Install
 
 ```bash
-python install.py /path/to/project
+python install.py /path/to/your/project
 ```
 
-### Option 3: Manual Install
+**Install options:**
+
+```bash
+python install.py /path/to/project              # Fresh install
+python install.py --update /path/to/project     # Update existing (preserves database)
+python install.py --force /path/to/project      # Force fresh install
+python install.py --uninstall /path/to/project  # Remove installation
+python install.py --uninstall --keep-db         # Uninstall but backup database
+```
+
+### Option 3: Quick Install Script
+
+```bash
+./quick-install.sh /path/to/project
+```
+
+### Option 4: Manual Install
 
 ```bash
 cd /path/to/project
 python -m venv .claude-map/venv
 .claude-map/venv/bin/pip install click watchdog tiktoken
 # Copy src/cartographer to .claude-map/src/cartographer
+# Create launcher scripts in .claude-map/bin/
+```
+
+> **Note:** Windows is not currently supported. macOS and Linux only.
+
+### Post-Installation
+
+After installation, initialize the codebase map:
+
+```bash
+cd /path/to/your/project
+.claude-map/bin/claude-map init              # Standard initialization
+.claude-map/bin/claude-map init -w 8         # Use 8 worker threads (faster)
+.claude-map/bin/claude-map init --watch      # Initialize and start watching
 ```
 
 ## CLI Commands
 
-| Command | Description |
-|---------|-------------|
-| `init` | Initialize codebase mapping |
-| `update` | Incremental update (changed files only) |
-| `query <text>` | Natural language query |
-| `find <name>` | Quick component search |
-| `show <file>` | Show components in a file |
-| `stats` | Display statistics |
-| `watch` | Real-time file watching |
-| `benchmark` | Run performance benchmark |
-| `optimize` | Optimize database |
-| `exports` | List exported components |
+### Quick Reference
 
-## Usage Examples
+| Command | Purpose | Key Options |
+|---------|---------|-------------|
+| `find <name>` | Quick name search | `-l/--limit`, `-o/--offset`, `-q/--quiet` |
+| `query "<text>"` | Natural language search | `-t/--max-tokens`, `-o/--offset`, `-f/--format`, `-q/--quiet` |
+| `show <file>` | File structure | `-q/--quiet` |
+| `exports` | List public API | `-l/--limit`, `-o/--offset`, `-q/--quiet` |
+| `stats` | Database stats | `-f/--format` |
+| `session` | Token savings | `-v/--verbose`, `--lifetime`, `-f/--format` |
+| `init [path]` | Initialize mapping | `-w/--workers`, `--no-mp`, `--watch` |
+| `update` | Incremental update | `-w/--workers`, `--no-mp` |
+| `watch` | Auto-update | `-d/--debounce` |
+| `optimize` | DB maintenance | (none) |
+| `benchmark` | Performance test | `--verbose/--quiet`, `-f/--format` |
+
+> **Note:** Commands with `-o/--offset` support pagination for large result sets.
+
+### Primary Commands
+
+#### `find` - Quick Component Search
+The fastest way to locate functions, classes, or components by name.
 
 ```bash
-# Initialize mapping
-claude-map init
+claude-map find <name>           # Search by name
+claude-map find <name> -l 50     # Return up to 50 results (default: 20)
+claude-map find <name> -o 20     # Skip first 20 results (pagination)
+claude-map find <name> -q        # Quiet mode (suppress token stats)
+```
 
-# Find components
-claude-map find UserProfile
-claude-map query "find authentication"
+#### `query` - Natural Language Search
+Complex searches with relationship understanding and token budgeting.
 
-# Show file contents
-claude-map show src/auth/user.py
+```bash
+claude-map query "<text>"              # Natural language query
+claude-map query "<text>" -t 5000      # Limit to 5000 tokens (default: 10000)
+claude-map query "<text>" -t 20000     # More results for large codebases
+claude-map query "<text>" -o 50        # Skip first 50 results (pagination)
+claude-map query "<text>" -f json      # Output as JSON
+claude-map query "<text>" -q           # Quiet mode
+```
 
-# Get dependencies
-claude-map query "dependencies for auth.py"
+**Query examples:**
+- `"find UserProfile component"` - find by name
+- `"what does auth.py depend on"` - dependency analysis
+- `"show me exported functions"` - list public API
+- `"call chain for authenticate"` - trace function calls
 
-# View statistics
-claude-map stats
+**Token limit guidance:**
+- `-t 2000` - Simple lookups, just a few results needed
+- `-t 10000` (default) - Broader exploration
+- `-t 20000` - Comprehensive results across large codebases
 
-# Run benchmark
-claude-map benchmark
+### Pagination
 
-# Watch for changes
-claude-map watch
+When results are truncated, the output shows pagination info:
+```
+--- Results 1-20 of 150 (use --offset 20 for next 20) ---
+```
+
+To get the next page of results, use the `--offset` / `-o` option:
+```bash
+claude-map find User -o 20       # Get results 21-40
+claude-map query "auth" -o 50    # Get results 51+
+claude-map exports -o 100        # Get exports 101+
+```
+
+Pagination is available on: `find`, `query`, and `exports` commands.
+
+#### `show` - File Structure Overview
+Understand a file's structure without reading the entire file.
+
+```bash
+claude-map show <file_path>      # Show all components in a file
+claude-map show <file_path> -q   # Quiet mode
+```
+
+### Utility Commands
+
+#### `exports` - List Public API
+```bash
+claude-map exports               # List all exported/public components
+claude-map exports -l 100        # Return up to 100 results (default: 50)
+claude-map exports -o 50         # Skip first 50 results (pagination)
+claude-map exports -q            # Quiet mode
+```
+
+#### `stats` - Database Statistics
+```bash
+claude-map stats                 # Show mapping statistics
+claude-map stats -f json         # Output as JSON
+```
+
+#### `session` - Token Savings Report
+```bash
+claude-map session               # Current session stats
+claude-map session -v            # Verbose (show recent queries)
+claude-map session --lifetime    # All-time statistics
+claude-map session -f json       # Output as JSON
+```
+
+### Maintenance Commands
+
+#### `init` - Initialize Mapping
+```bash
+claude-map init                  # Initialize in current directory
+claude-map init /path/to/project # Initialize specific path
+claude-map init -w 8             # Use 8 worker threads
+claude-map init --no-mp          # Disable multiprocessing
+claude-map init --watch          # Watch for changes after init
+```
+
+#### `update` - Incremental Update
+```bash
+claude-map update                # Update changed files only
+claude-map update -w 8           # Use 8 worker threads
+claude-map update --no-mp        # Disable multiprocessing
+```
+
+#### `watch` - Auto-Update on Changes
+```bash
+claude-map watch                 # Watch and auto-update
+claude-map watch -d 1.0          # 1 second debounce (default: 0.5)
+```
+
+#### `optimize` - Database Optimization
+```bash
+claude-map optimize              # VACUUM and ANALYZE the database
+```
+
+#### `benchmark` - Performance Testing
+```bash
+claude-map benchmark             # Compare cartographer vs traditional approach
+claude-map benchmark --quiet     # Less verbose output
+claude-map benchmark -f json     # Output as JSON
 ```
 
 ## Python API
@@ -188,14 +315,28 @@ from cartographer import ClaudeCodeIntegration
 # Initialize
 integration = ClaudeCodeIntegration('/path/to/project')
 
-# Token-budgeted queries
-context = integration.get_context("find authentication", max_tokens=2000)
+# Token-budgeted queries (default: 10000 tokens)
+context = integration.get_context("find authentication")
+
+# With custom token limits
+context = integration.get_context("find authentication", max_tokens=2000)   # Minimal
+context = integration.get_context("show all exports", max_tokens=20000)     # Comprehensive
+
+# With pagination (offset parameter)
+context = integration.get_context("find User", offset=20)  # Skip first 20 results
 
 # Quick operations
-result = integration.quick_find('UserProfile')
-summary = integration.get_file_summary('src/auth.py')
-exports = integration.list_exports()
-stats = integration.get_stats()
+result = integration.quick_find('UserProfile')             # Find by name
+result = integration.quick_find('User', limit=50)          # With result limit
+result = integration.quick_find('User', limit=20, offset=20)  # Pagination
+summary = integration.get_file_summary('src/auth.py')      # File structure
+exports = integration.list_exports(limit=100)              # Public API
+exports = integration.list_exports(limit=50, offset=50)    # Pagination
+stats = integration.get_stats()                            # Database stats
+
+# Session tracking
+session_summary = integration.get_session_summary()        # Current session
+lifetime_stats = integration.get_lifetime_stats()          # All-time stats
 
 # Clean up
 integration.close()
@@ -248,23 +389,49 @@ The installer automatically sets up Claude Code integration:
 
 ### CLAUDE.md Integration
 
-The installer adds instructions to your project's `CLAUDE.md` file that teach Claude to prioritize the cartographer over its native tools:
+The installer adds comprehensive instructions to your project's `CLAUDE.md` file that teach Claude how to use the cartographer effectively. The injected documentation includes:
+
+- **Complete command reference** with all options and flags
+- **"When to use" guidance** for each command
+- **Token limit guidance** for optimizing queries
+- **Query examples** for natural language searches
+- **Absolute paths** to the `claude-map` binary (automatically configured per-installation)
+
+**Example of what gets added:**
 
 ```markdown
 ## CRITICAL: Use Codebase Cartographer First
 
-**You MUST use the cartographer BEFORE using Read, Grep, or Glob tools to explore code.**
+**BEFORE using Read, Grep, or Glob tools to explore code, use the cartographer.**
 
-**In Planning Mode:** When using EnterPlanMode, your FIRST action should be to use the cartographer...
+### Primary Commands
+
+#### `find` - Quick Component Search (Use Most Often)
+/path/to/project/.claude-map/bin/claude-map find <name>      # Search by name
+/path/to/project/.claude-map/bin/claude-map find <name> -l 50 # Up to 50 results
+
+#### `query` - Natural Language Search
+/path/to/project/.claude-map/bin/claude-map query "<text>"         # Natural language
+/path/to/project/.claude-map/bin/claude-map query "<text>" -t 5000 # Token-limited
+
+**Token limit guidance:**
+- Use `-t 2000` for simple lookups
+- Use default (10000) for broader exploration
+- Use `-t 20000` for comprehensive results
+
+### Command Reference
+| Command | Purpose | Key Options |
+|---------|---------|-------------|
+| find    | Quick name search | -l/--limit, -q/--quiet |
+| query   | Natural language  | -t/--max-tokens, -f/--format |
+... (full table with all 11 commands)
 ```
 
 **Key behaviors:**
-- Claude is instructed to query the cartographer **first** before using Read, Grep, or Glob
-- In **Planning Mode**, Claude uses the cartographer as its first action to understand the codebase structure
-- If the cartographer returns no results, Claude **falls back** to its native tools (Grep, Glob, Read)
+- Claude queries the cartographer **first** before using Read, Grep, or Glob
+- If the cartographer returns no results, Claude **falls back** to native tools
 - The section is wrapped in `<!-- CARTOGRAPHER_START -->` / `<!-- CARTOGRAPHER_END -->` markers for easy updates
-
-This "cartographer-first, native-fallback" approach ensures Claude always tries the token-efficient path while maintaining full functionality for edge cases the cartographer doesn't cover.
+- Running `python install.py --update` refreshes the documentation while preserving your other CLAUDE.md content
 
 ### Automatic Updates
 Hooks automatically queue file updates when you use Edit/Write tools.

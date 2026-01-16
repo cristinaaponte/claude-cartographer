@@ -639,24 +639,149 @@ Run: `{self.claude_map_bin} <subcommand>`
         cartographer_section = f'''{CARTOGRAPHER_START_MARKER}
 ## CRITICAL: Use Codebase Cartographer First
 
-**BEFORE using Read, Grep, or Glob tools to explore code, use the cartographer:**
-
-```bash
-{self.claude_map_bin} find <name>      # Find function/class/component by name
-{self.claude_map_bin} query "<text>"   # Natural language search
-{self.claude_map_bin} show <file>      # Show file structure without reading full content
-```
-
-**Why this matters:**
-- Saves 95%+ tokens compared to reading full files
-- Returns precise line numbers and signatures
-- Use Read tool ONLY after cartographer identifies the specific lines you need
+**BEFORE using Read, Grep, or Glob tools to explore code, use the cartographer.** It saves 95%+ tokens compared to reading full files and returns precise line numbers and signatures.
 
 **Workflow:**
-1. `{self.claude_map_bin} find ComponentName` - get file path and line numbers
-2. `Read` tool with specific line range if you need implementation details
+1. Use cartographer to find file paths and line numbers
+2. Use `Read` tool with specific line range only if you need full implementation details
 
 **Fallback:** If cartographer returns no results, use native Grep/Glob/Read tools.
+
+### Primary Commands
+
+#### `find` - Quick Component Search (Use Most Often)
+```bash
+{self.claude_map_bin} find <name>                    # Search by name
+{self.claude_map_bin} find <name> -l 50              # Return up to 50 results (default: 20)
+{self.claude_map_bin} find <name> -o 20              # Skip first 20 (pagination)
+{self.claude_map_bin} find <name> -q                 # Quiet mode (suppress token stats)
+```
+**When to use:** Finding specific functions, classes, components, or variables by name. Fastest option for known names.
+
+#### `query` - Natural Language Search
+```bash
+{self.claude_map_bin} query "<text>"                 # Natural language query
+{self.claude_map_bin} query "<text>" -t 5000         # Limit to 5000 tokens (default: 10000)
+{self.claude_map_bin} query "<text>" -o 50           # Skip first 50 results (pagination)
+{self.claude_map_bin} query "<text>" -f json         # Output as JSON
+{self.claude_map_bin} query "<text>" -q              # Quiet mode
+```
+**When to use:** Complex searches, understanding relationships, finding by description rather than exact name.
+
+**Query examples:**
+- `"find UserProfile component"` - find by name
+- `"what does auth.py depend on"` - dependency analysis
+- `"show me exported functions"` - list public API
+- `"call chain for authenticate"` - trace function calls
+
+**Token limit guidance:**
+- Use `-t 2000` for simple lookups where you need just a few results
+- Use default (10000) for broader exploration
+- Use `-t 20000` when you need comprehensive results across large codebases
+
+### Pagination
+
+When results are truncated, the output will show:
+```
+--- Results 1-20 of 150 (use --offset 20 for next 20) ---
+```
+
+**To get the next page of results**, use the `--offset` / `-o` option:
+```bash
+{self.claude_map_bin} find User -o 20    # Get results 21-40
+{self.claude_map_bin} query "auth" -o 50 # Get results 51+
+{self.claude_map_bin} exports -o 100     # Get exports 101+
+```
+
+**Pagination is available on:** `find`, `query`, and `exports` commands.
+
+#### `show` - File Structure Overview
+```bash
+{self.claude_map_bin} show <file_path>               # Show all components in a file
+{self.claude_map_bin} show <file_path> -q            # Quiet mode
+```
+**When to use:** Understanding a file's structure without reading the entire file. Shows functions, classes, exports with line numbers.
+
+### Utility Commands
+
+#### `exports` - List Public API
+```bash
+{self.claude_map_bin} exports                        # List all exported/public components
+{self.claude_map_bin} exports -l 100                 # Return up to 100 results (default: 50)
+{self.claude_map_bin} exports -o 50                  # Skip first 50 (pagination)
+{self.claude_map_bin} exports -q                     # Quiet mode
+```
+**When to use:** Understanding the public interface of the codebase.
+
+#### `stats` - Database Statistics
+```bash
+{self.claude_map_bin} stats                          # Show mapping statistics
+{self.claude_map_bin} stats -f json                  # Output as JSON
+```
+**When to use:** Understanding codebase size, languages used, mapping coverage.
+
+#### `session` - Token Savings Report
+```bash
+{self.claude_map_bin} session                        # Current session stats
+{self.claude_map_bin} session -v                     # Verbose (show recent queries)
+{self.claude_map_bin} session --lifetime             # All-time statistics
+{self.claude_map_bin} session -f json                # Output as JSON
+```
+
+### Maintenance Commands
+
+#### `init` - Initialize Mapping
+```bash
+{self.claude_map_bin} init                           # Initialize in current directory
+{self.claude_map_bin} init /path/to/project          # Initialize specific path
+{self.claude_map_bin} init -w 8                      # Use 8 worker threads
+{self.claude_map_bin} init --no-mp                   # Disable multiprocessing
+{self.claude_map_bin} init --watch                   # Watch for changes after init
+```
+
+#### `update` - Incremental Update
+```bash
+{self.claude_map_bin} update                         # Update changed files only
+{self.claude_map_bin} update -w 8                    # Use 8 worker threads
+{self.claude_map_bin} update --no-mp                 # Disable multiprocessing
+```
+**When to use:** After making code changes, to keep the map current.
+
+#### `watch` - Auto-Update on Changes
+```bash
+{self.claude_map_bin} watch                          # Watch and auto-update
+{self.claude_map_bin} watch -d 1.0                   # 1 second debounce (default: 0.5)
+```
+
+#### `optimize` - Database Optimization
+```bash
+{self.claude_map_bin} optimize                       # VACUUM and ANALYZE the database
+```
+
+#### `benchmark` - Performance Testing
+```bash
+{self.claude_map_bin} benchmark                      # Compare cartographer vs traditional approach
+{self.claude_map_bin} benchmark --quiet              # Less verbose output
+{self.claude_map_bin} benchmark -f json              # Output as JSON
+```
+
+### Command Reference
+
+| Command | Purpose | Key Options |
+|---------|---------|-------------|
+| `find <name>` | Quick name search | `-l/--limit`, `-o/--offset`, `-q/--quiet` |
+| `query "<text>"` | Natural language search | `-t/--max-tokens`, `-o/--offset`, `-f/--format`, `-q/--quiet` |
+| `show <file>` | File structure | `-q/--quiet` |
+| `exports` | List public API | `-l/--limit`, `-o/--offset`, `-q/--quiet` |
+| `stats` | Database stats | `-f/--format` |
+| `session` | Token savings | `-v/--verbose`, `--lifetime`, `-f/--format` |
+| `init [path]` | Initialize mapping | `-w/--workers`, `--no-mp`, `--watch` |
+| `update` | Incremental update | `-w/--workers`, `--no-mp` |
+| `watch` | Auto-update | `-d/--debounce` |
+| `optimize` | DB maintenance | (none) |
+| `benchmark` | Performance test | `--verbose/--quiet`, `-f/--format` |
+
+**Note:** Commands with `-o/--offset` support pagination. When results are truncated, the output shows the offset to use for the next page.
 {CARTOGRAPHER_END_MARKER}'''
 
         if claude_md.exists():

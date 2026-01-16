@@ -28,6 +28,9 @@ class RubyParser(BaseParser):
         # Extract components
         self._extract_components(lines, file_path, result)
 
+        # Extract security patterns
+        self._extract_security_patterns(lines, file_path, result)
+
         return result
 
     def _extract_requires(self, content: str, file_path: str, result: ParseResult):
@@ -199,3 +202,99 @@ class RubyParser(BaseParser):
                     exported=True
                 )
                 result.add_component(component)
+
+    def _extract_security_patterns(self, lines: List[str], file_path: str, result: ParseResult):
+        """
+        Extract security-relevant patterns for security auditing.
+        Categories: input_source, output_sink, data_operation, security_control
+        """
+        # Input sources
+        input_patterns = [
+            # Rails request access
+            (r'params\[', 'params', 'input_source'),
+            (r'params\.permit\s*\(', 'params_permit', 'input_source'),
+            (r'params\.require\s*\(', 'params_require', 'input_source'),
+            (r'request\.headers\[', 'http_header', 'input_source'),
+            (r'request\.env\[', 'request_env', 'input_source'),
+            (r'cookies\[', 'cookie', 'input_source'),
+            (r'session\[', 'session', 'input_source'),
+            # Environment
+            (r'ENV\[', 'env_var', 'input_source'),
+            (r'ENV\.fetch\s*\(', 'env_var', 'input_source'),
+            # User input
+            (r'gets\b', 'stdin', 'input_source'),
+            (r'ARGV\[', 'cli_arg', 'input_source'),
+        ]
+
+        # Output sinks
+        output_patterns = [
+            # Template rendering
+            (r'\.html_safe\b', 'html_safe', 'output_sink'),
+            (r'raw\s*\(', 'raw', 'output_sink'),
+            (r'render\s+inline:', 'render_inline', 'output_sink'),
+            # Code execution
+            (r'eval\s*\(', 'eval', 'output_sink'),
+            (r'instance_eval\s*\(', 'instance_eval', 'output_sink'),
+            (r'class_eval\s*\(', 'class_eval', 'output_sink'),
+            (r'send\s*\(', 'send', 'output_sink'),
+            (r'public_send\s*\(', 'public_send', 'output_sink'),
+            (r'system\s*\(', 'system', 'output_sink'),
+            (r'exec\s*\(', 'exec', 'output_sink'),
+            (r'`[^`]+`', 'backtick', 'output_sink'),
+            (r'%x\{', 'backtick', 'output_sink'),
+            # Deserialization
+            (r'Marshal\.load\s*\(', 'marshal_load', 'output_sink'),
+            (r'YAML\.load\s*\(', 'yaml_load', 'output_sink'),
+        ]
+
+        # Data operations
+        data_patterns = [
+            # ActiveRecord SQL
+            (r'\.where\s*\(', 'where', 'data_operation'),
+            (r'\.find_by_sql\s*\(', 'find_by_sql', 'data_operation'),
+            (r'\.execute\s*\(', 'sql_execute', 'data_operation'),
+            (r'\.select\s*\(', 'select', 'data_operation'),
+            (r'\.joins\s*\(', 'joins', 'data_operation'),
+            (r'\.order\s*\(', 'order', 'data_operation'),
+            # File operations
+            (r'File\.(open|read|write|delete)\s*\(', 'file_operation', 'data_operation'),
+            (r'IO\.(read|write)\s*\(', 'io_operation', 'data_operation'),
+        ]
+
+        # Security controls
+        security_patterns = [
+            (r'ERB::Util\.html_escape\s*\(', 'html_escape', 'security_control'),
+            (r'h\s*\(', 'html_escape', 'security_control'),
+            (r'sanitize\s*\(', 'sanitize', 'security_control'),
+            (r'strip_tags\s*\(', 'strip_tags', 'security_control'),
+            (r'protect_from_forgery', 'csrf', 'security_control'),
+            (r'authenticate_user!', 'auth', 'security_control'),
+            (r'authorize!', 'authorize', 'security_control'),
+            (r'BCrypt::', 'bcrypt', 'security_control'),
+            (r'has_secure_password', 'secure_password', 'security_control'),
+        ]
+
+        all_patterns = input_patterns + output_patterns + data_patterns + security_patterns
+
+        for i, line in enumerate(lines, 1):
+            for pattern, subtype, category in all_patterns:
+                if match := re.search(pattern, line):
+                    context = match.group(0)[:40].replace('\n', ' ').strip()
+                    name = f"{category}_{subtype}_L{i}"
+
+                    component = ComponentData(
+                        name=name,
+                        type='security_pattern',
+                        file_path=file_path,
+                        line_start=i,
+                        line_end=i,
+                        signature=line.strip()[:100],
+                        exported=False,
+                        metadata={
+                            'category': category,
+                            'subtype': subtype,
+                            'pattern': pattern,
+                            'context': context
+                        }
+                    )
+                    result.add_component(component)

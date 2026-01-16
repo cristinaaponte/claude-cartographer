@@ -47,7 +47,7 @@ class ClaudeCodeIntegration:
         # Session tracking for token savings
         self.tracker = SessionTracker(self.project_root) if track_session else None
 
-    def get_context(self, query: str, max_tokens: int = 2000) -> str:
+    def get_context(self, query: str, max_tokens: int = 10000, offset: int = 0) -> str:
         """
         Primary method for getting context from the codebase.
 
@@ -67,9 +67,10 @@ class ClaudeCodeIntegration:
         Args:
             query: Natural language query
             max_tokens: Maximum tokens to return
+            offset: Skip first N results (for pagination)
 
         Returns:
-            Token-optimized context string
+            Token-optimized context string with pagination info when truncated
         """
         query_lower = query.lower().strip()
         intent, target = self._parse_intent(query_lower)
@@ -81,7 +82,7 @@ class ClaudeCodeIntegration:
         if intent == 'overview':
             result = self._get_overview(max_tokens)
         elif intent == 'find':
-            result = self._get_find_results(target, max_tokens)
+            result = self._get_find_results(target, max_tokens, offset)
         elif intent == 'detail':
             result = self._get_component_detail(target, max_tokens)
         elif intent == 'dependencies':
@@ -89,15 +90,15 @@ class ClaudeCodeIntegration:
         elif intent == 'calls':
             result = self._get_call_chain(target, max_tokens)
         elif intent == 'search':
-            result = self._get_search_results(target, max_tokens)
+            result = self._get_search_results(target, max_tokens, offset)
         elif intent == 'file':
             result = self._get_file_summary(target, max_tokens)
         elif intent == 'exports':
-            result = self._get_exports(max_tokens)
+            result = self._get_exports(max_tokens, offset)
         else:
             # Default to search
             intent = 'search'
-            result = self._get_search_results(query, max_tokens)
+            result = self._get_search_results(query, max_tokens, offset)
 
         # Track token savings with timing and cache info
         self._track_query(intent, query, result, start_time, cache_hits_before)
@@ -228,10 +229,10 @@ class ClaudeCodeIntegration:
 
         return result
 
-    def _get_find_results(self, name: str, max_tokens: int) -> str:
-        """Find components by name."""
+    def _get_find_results(self, name: str, max_tokens: int, offset: int = 0) -> str:
+        """Find components by name with pagination support."""
         limit = max(max_tokens // 50, 10)  # Estimate ~50 tokens per result
-        return self.db.query_compact(name, limit=limit)
+        return self.db.query_compact(name, limit=limit, offset=offset)
 
     def _get_component_detail(self, name: str, max_tokens: int) -> str:
         """Get detailed component information."""
@@ -270,19 +271,19 @@ class ClaudeCodeIntegration:
         depth = 3 if max_tokens > 500 else 2
         return self.db.get_call_chain(func_name, max_depth=depth)
 
-    def _get_search_results(self, query: str, max_tokens: int) -> str:
-        """Full-text search."""
+    def _get_search_results(self, query: str, max_tokens: int, offset: int = 0) -> str:
+        """Full-text search with pagination support."""
         limit = max(max_tokens // 50, 10)
-        return self.db.search_fts(query, limit=limit)
+        return self.db.search_fts(query, limit=limit, offset=offset)
 
     def _get_file_summary(self, file_path: str, max_tokens: int) -> str:
         """Get file summary."""
         return self.db.get_file_components(file_path)
 
-    def _get_exports(self, max_tokens: int) -> str:
-        """Get exported components."""
+    def _get_exports(self, max_tokens: int, offset: int = 0) -> str:
+        """Get exported components with pagination support."""
         limit = max(max_tokens // 50, 20)
-        return self.db.list_exports(limit=limit)
+        return self.db.list_exports(limit=limit, offset=offset)
 
     # ================================================================
     # PERFORMANCE TRACKING HELPER
@@ -311,15 +312,16 @@ class ClaudeCodeIntegration:
     # CONVENIENCE METHODS
     # ================================================================
 
-    def quick_find(self, name: str, limit: int = 10) -> str:
+    def quick_find(self, name: str, limit: int = 10, offset: int = 0) -> str:
         """
         Quick search for a component by name.
         Returns compact representations for minimal tokens.
+        Supports pagination via offset parameter.
         """
         start_time = time.time()
         cache_hits_before = self.db.cache_hits
 
-        result = self.db.query_compact(name, limit=limit)
+        result = self.db.query_compact(name, limit=limit, offset=offset)
 
         self._track_query('find', name, result, start_time, cache_hits_before)
         return result
@@ -334,12 +336,12 @@ class ClaudeCodeIntegration:
         self._track_query('show', file_path, result, start_time, cache_hits_before)
         return result
 
-    def list_exports(self, limit: int = 50) -> str:
-        """List all exported (public) components."""
+    def list_exports(self, limit: int = 50, offset: int = 0) -> str:
+        """List all exported (public) components with pagination support."""
         start_time = time.time()
         cache_hits_before = self.db.cache_hits
 
-        result = self.db.list_exports(limit=limit)
+        result = self.db.list_exports(limit=limit, offset=offset)
 
         self._track_query('exports', '', result, start_time, cache_hits_before)
         return result
@@ -364,9 +366,9 @@ class ClaudeCodeIntegration:
         """Get call chain for a function."""
         return self.db.get_call_chain(func_name, max_depth=depth)
 
-    def search(self, query: str, limit: int = 20) -> str:
-        """Full-text search across codebase."""
-        return self.db.search_fts(query, limit=limit)
+    def search(self, query: str, limit: int = 20, offset: int = 0) -> str:
+        """Full-text search across codebase with pagination support."""
+        return self.db.search_fts(query, limit=limit, offset=offset)
 
     def get_test_coverage(self) -> str:
         """Get overview of test components."""

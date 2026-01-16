@@ -7,6 +7,7 @@ Python language parser using AST.
 """
 
 import ast as python_ast
+import re
 from pathlib import Path
 from typing import List, Dict, Optional, Any
 
@@ -23,10 +24,10 @@ class PythonParser(BaseParser):
     def parse(self, content: str, file_path: str) -> ParseResult:
         """Parse Python file."""
         result = ParseResult()
+        lines = content.split('\n')
 
         try:
             tree = python_ast.parse(content)
-            lines = content.split('\n')
 
             # Extract __all__ for exports
             exports = self._extract_all_exports(tree)
@@ -49,6 +50,9 @@ class PythonParser(BaseParser):
             pass  # Skip files with syntax errors
         except Exception:
             pass  # Skip files that can't be parsed
+
+        # Extract security patterns (regex-based, works even if AST fails)
+        self._extract_security_patterns(lines, file_path, result)
 
         return result
 
@@ -411,3 +415,119 @@ class PythonParser(BaseParser):
             if method in self.ROUTE_DECORATORS:
                 return {'method': method.upper(), 'path': '/'}
         return None
+
+    def _extract_security_patterns(self, lines: List[str], file_path: str, result: ParseResult):
+        """
+        Extract security-relevant patterns for security auditing.
+        Categories: input_source, output_sink, data_operation, security_control
+        """
+        # Input sources - where external data enters
+        input_patterns = [
+            # Flask/FastAPI request access
+            (r'request\.(form|args|values|json|data|files|headers|cookies)\[', 'request_data', 'input_source'),
+            (r'request\.get_json\s*\(', 'request_json', 'input_source'),
+            (r'request\.form\.get\s*\(', 'form_data', 'input_source'),
+            (r'request\.args\.get\s*\(', 'query_param', 'input_source'),
+            (r'request\.headers\.get\s*\(', 'http_header', 'input_source'),
+            (r'request\.cookies\.get\s*\(', 'cookie', 'input_source'),
+            # Django
+            (r'request\.(GET|POST|FILES)\[', 'request_data', 'input_source'),
+            (r'request\.(GET|POST)\.get\s*\(', 'request_data', 'input_source'),
+            (r'request\.META\.get\s*\(', 'request_meta', 'input_source'),
+            (r'request\.COOKIES\.get\s*\(', 'cookie', 'input_source'),
+            # Environment
+            (r'os\.environ\[', 'env_var', 'input_source'),
+            (r'os\.environ\.get\s*\(', 'env_var', 'input_source'),
+            (r'os\.getenv\s*\(', 'env_var', 'input_source'),
+            # Command line / stdin
+            (r'sys\.argv\[', 'cli_arg', 'input_source'),
+            (r'argparse\.', 'cli_arg', 'input_source'),
+            (r'input\s*\(', 'stdin', 'input_source'),
+            (r'sys\.stdin', 'stdin', 'input_source'),
+            # File input
+            (r'open\s*\([^)]+,\s*[\'"]r', 'file_read', 'input_source'),
+        ]
+
+        # Output sinks - where data is rendered/output
+        output_patterns = [
+            # Template rendering (potential XSS)
+            (r'render_template\s*\(', 'template_render', 'output_sink'),
+            (r'render_template_string\s*\(', 'template_string', 'output_sink'),
+            (r'Markup\s*\(', 'markup', 'output_sink'),
+            (r'mark_safe\s*\(', 'mark_safe', 'output_sink'),
+            # Django templates
+            (r'\|safe\b', 'django_safe', 'output_sink'),
+            (r'format_html\s*\(', 'format_html', 'output_sink'),
+            # Direct output
+            (r'print\s*\(', 'print', 'output_sink'),
+            (r'sys\.stdout\.write\s*\(', 'stdout', 'output_sink'),
+            # Code execution
+            (r'eval\s*\(', 'eval', 'output_sink'),
+            (r'exec\s*\(', 'exec', 'output_sink'),
+            (r'compile\s*\(', 'compile', 'output_sink'),
+            (r'subprocess\.(call|run|Popen|check_output)', 'subprocess', 'output_sink'),
+            (r'os\.system\s*\(', 'os_system', 'output_sink'),
+            (r'os\.popen\s*\(', 'os_popen', 'output_sink'),
+            # Pickle (deserialization)
+            (r'pickle\.loads?\s*\(', 'pickle', 'output_sink'),
+            (r'yaml\.load\s*\(', 'yaml_load', 'output_sink'),
+        ]
+
+        # Data operations - database, file operations
+        data_patterns = [
+            # Raw SQL
+            (r'\.execute\s*\(', 'sql_execute', 'data_operation'),
+            (r'\.executemany\s*\(', 'sql_execute', 'data_operation'),
+            (r'cursor\.execute', 'sql_execute', 'data_operation'),
+            (r'\.raw\s*\(', 'sql_raw', 'data_operation'),
+            (r'RawSQL\s*\(', 'sql_raw', 'data_operation'),
+            # ORM queries
+            (r'\.filter\s*\(', 'orm_filter', 'data_operation'),
+            (r'\.get\s*\(', 'orm_get', 'data_operation'),
+            (r'\.create\s*\(', 'orm_create', 'data_operation'),
+            (r'\.update\s*\(', 'orm_update', 'data_operation'),
+            (r'\.delete\s*\(', 'orm_delete', 'data_operation'),
+            # File operations
+            (r'open\s*\([^)]+,\s*[\'"]w', 'file_write', 'data_operation'),
+            (r'shutil\.(copy|move|rmtree)', 'file_operation', 'data_operation'),
+            (r'os\.(remove|unlink|rmdir|makedirs|mkdir)', 'file_operation', 'data_operation'),
+        ]
+
+        # Security controls
+        security_patterns = [
+            (r'escape\s*\(', 'escape', 'security_control'),
+            (r'html\.escape\s*\(', 'html_escape', 'security_control'),
+            (r'bleach\.clean\s*\(', 'bleach', 'security_control'),
+            (r'sanitize\w*\s*\(', 'sanitize', 'security_control'),
+            (r'validate\w*\s*\(', 'validate', 'security_control'),
+            (r'hashlib\.(sha256|sha512|pbkdf2)', 'hash', 'security_control'),
+            (r'secrets\.(token|randbelow)', 'secrets', 'security_control'),
+            (r'csrf_protect', 'csrf', 'security_control'),
+            (r'@login_required', 'auth_decorator', 'security_control'),
+            (r'@permission_required', 'permission_decorator', 'security_control'),
+        ]
+
+        all_patterns = input_patterns + output_patterns + data_patterns + security_patterns
+
+        for i, line in enumerate(lines, 1):
+            for pattern, subtype, category in all_patterns:
+                if match := re.search(pattern, line):
+                    context = match.group(0)[:40].replace('\n', ' ').strip()
+                    name = f"{category}_{subtype}_L{i}"
+
+                    component = ComponentData(
+                        name=name,
+                        type='security_pattern',
+                        file_path=file_path,
+                        line_start=i,
+                        line_end=i,
+                        signature=line.strip()[:100],
+                        exported=False,
+                        metadata={
+                            'category': category,
+                            'subtype': subtype,
+                            'pattern': pattern,
+                            'context': context
+                        }
+                    )
+                    result.add_component(component)
