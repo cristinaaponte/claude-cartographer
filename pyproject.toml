@@ -1,0 +1,102 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claude-cartographer"
+version = "3.0.0"
+description = "Save 95%+ tokens when working with large codebases in Claude Code"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Mike Piekarski", email = "mp@breachcraft.io"}
+]
+maintainers = [
+    {name = "Mike Piekarski", email = "mp@breachcraft.io"}
+]
+keywords = [
+    "claude",
+    "claude-code",
+    "claude-ai",
+    "anthropic",
+    "agents",
+    "skills",
+    "hooks",
+    "codebase",
+    "mapping",
+    "tokens",
+    "token-optimization",
+    "optimization",
+    "llm",
+    "ai",
+    "code-analysis",
+    "developer-tools",
+    "productivity",
+    "ast-parser",
+    "code-search",
+    "code-navigation"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Software Development :: Documentation",
+    "Topic :: Text Processing :: Indexing",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "click>=8.0.0",
+    "watchdog>=2.1.0",
+    "tiktoken>=0.5.0",
+]
+
+[project.optional-dependencies]
+tree-sitter = [
+    "tree-sitter>=0.21.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "mypy>=1.0.0",
+]
+
+[project.scripts]
+claude-map = "cartographer.cli:cli"
+
+[project.urls]
+Homepage = "https://github.com/pect0ral/claude-cartographer"
+Documentation = "https://github.com/pect0ral/claude-cartographer#readme"
+Repository = "https://github.com/pect0ral/claude-cartographer.git"
+Issues = "https://github.com/pect0ral/claude-cartographer/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.black]
+line-length = 100
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+include = '\.pyi?$'
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"

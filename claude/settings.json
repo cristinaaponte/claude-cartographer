@@ -1,0 +1,21 @@
+{
+  "$schema": "https://claude.ai/schemas/claude-code-settings.json",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [".claude/hooks/cartographer-update.sh"]
+      }
+    ],
+    "Stop": [".claude/hooks/cartographer-finalize.sh"]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(.claude-map/bin/*)",
+      "Read(.claude-map/**)"
+    ]
+  },
+  "skills": [
+    ".claude/skills/cartographer.md"
+  ]
+}
