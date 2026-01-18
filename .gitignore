@@ -88,6 +88,7 @@ Desktop.ini
 # DO NOT ignore .claude-map/ directory - it's the installed tool
 # DO NOT ignore .claude/ directory - it's Claude Code integration
 # However, DO ignore specific working files:
+.worktrees/
 .claude-map/logs/*.log
 .claude-map/cache/update_queue.txt
 .claude-map/codebase.db-shm
